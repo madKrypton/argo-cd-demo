@@ -95,7 +95,7 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
         with:
-          token: ${{ secrets.GITHUB_TOKEN }}
+          token: ${{ secrets.MUSICAPP_GITHUB_TOKEN }}
 
       - name: Update deployment image tag
         run: |
