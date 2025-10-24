@@ -1,0 +1,36 @@
+apiVersion: kustomize.config.k8s.io/v1beta1
+kind: Kustomization
+
+namespace: music-app-dev
+
+namePrefix: dev-
+
+commonLabels:
+  environment: dev
+  managed-by: argocd
+
+resources:
+  - ../../namespace.yaml
+  - ../../deployment.yaml
+  - ../../service.yaml
+  - ../../configmap.yaml
+
+replicas:
+  - name: music-dashboard
+    count: 2
+
+images:
+  - name: appukuttan/mastersong
+    newTag: v11
+
+patches:
+  - patch: |-
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/requests/memory
+        value: "64Mi"
+      - op: replace
+        path: /spec/template/spec/containers/0/resources/limits/memory
+        value: "128Mi"
+    target:
+      kind: Deployment
+      name: music-dashboard
