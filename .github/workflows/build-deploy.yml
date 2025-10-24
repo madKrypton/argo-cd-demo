@@ -8,7 +8,7 @@ on:
     paths:
       - 'app/**'
       - 'Dockerfile'
-      - '.github/workflows/ci-cd-pipeline.yml'
+      - '.github/workflows/build-deploy.yml'
   pull_request:
     branches:
       - dev
