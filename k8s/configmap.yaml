@@ -1,0 +1,11 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: music-dashboard-config
+  labels:
+    app: music-dashboard
+data:
+  APP_NAME: "Music Dashboard"
+  APP_VERSION: "v1.0.0"
+  AUTHOR: "Akash"
+  ENVIRONMENT: "production"

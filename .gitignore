@@ -1,0 +1,43 @@
+# Security - Never commit these files with real credentials
+*-secret-filled.yaml
+*-credentials.yaml
+*.key
+*.pem
+
+# ArgoCD secrets with actual PATs
+argocd-application/repository-secret-*.yaml
+
+# Environment files
+.env
+.env.local
+*.env
+
+# IDE and editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+
+# Temporary files
+*.tmp
+*.temp
+tmp/
+temp/
+
+# Docker
+*.pid
+.docker/
+
+# Kubernetes
+kubeconfig
+*.kubeconfig

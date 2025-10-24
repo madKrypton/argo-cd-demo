@@ -1,0 +1,7 @@
+apiVersion: v1
+kind: Namespace
+metadata:
+  name: music-dashboard
+  labels:
+    name: music-dashboard
+    author: akash

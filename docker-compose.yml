@@ -1,0 +1,20 @@
+version: '3.8'
+
+services:
+  music-dashboard:
+    build: .
+    container_name: music-dashboard
+    ports:
+      - "8080:80"
+    restart: unless-stopped
+    volumes:
+      # Uncomment if you want to mount local files for development
+      # - ./index.html:/usr/share/nginx/html/index.html
+      # - ./styles.css:/usr/share/nginx/html/styles.css
+      # - ./script.js:/usr/share/nginx/html/script.js
+    networks:
+      - music-network
+
+networks:
+  music-network:
+    driver: bridge

@@ -1,0 +1,131 @@
+name: Build and Deploy Music Dashboard
+
+on:
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - 'app/**'
+      - 'Dockerfile'
+      - '.github/workflows/build-deploy.yml'
+  workflow_dispatch:
+
+env:
+  DOCKERHUB_USERNAME: appukuttan
+  IMAGE_NAME: mastersong
+  REGISTRY: docker.io
+
+jobs:
+  build-and-push:
+    name: Build Docker Image and Push to DockerHub
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.increment_tag.outputs.new_tag }}
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Login to DockerHub
+        uses: docker/login-action@v3
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Get current tag and increment
+        id: increment_tag
+        run: |
+          # Fetch all tags
+          git fetch --tags
+          
+          # Get the latest tag matching v* pattern
+          LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
+          
+          if [ -z "$LATEST_TAG" ]; then
+            # No tags found, start with v1
+            NEW_TAG="v1"
+          else
+            # Extract version number and increment
+            VERSION=${LATEST_TAG#v}
+            NEW_VERSION=$((VERSION + 1))
+            NEW_TAG="v${NEW_VERSION}"
+          fi
+          
+          echo "Latest tag: $LATEST_TAG"
+          echo "New tag: $NEW_TAG"
+          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
+          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
+
+      - name: Build and push Docker image
+        uses: docker/build-push-action@v5
+        with:
+          context: .
+          file: ./Dockerfile
+          push: true
+          tags: |
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.increment_tag.outputs.new_tag }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:latest
+          cache-from: type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache
+          cache-to: type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
+
+      - name: Create and push Git tag
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a ${{ steps.increment_tag.outputs.new_tag }} -m "Release ${{ steps.increment_tag.outputs.new_tag }}"
+          git push origin ${{ steps.increment_tag.outputs.new_tag }}
+
+  update-k8s-manifest:
+    name: Update Kubernetes Deployment
+    runs-on: ubuntu-latest
+    needs: build-and-push
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Update deployment image tag
+        run: |
+          NEW_TAG="${{ needs.build-and-push.outputs.new_tag }}"
+          
+          # Update the image tag in deployment.yaml
+          sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/deployment.yaml
+          
+          echo "Updated deployment.yaml with image tag: ${NEW_TAG}"
+          
+          # Show the changes
+          cat k8s/deployment.yaml | grep -A 2 "image:"
+
+      - name: Commit and push changes
+        run: |
+          git config user.name "GitHub Actions Bot"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          
+          git add k8s/deployment.yaml
+          
+          if git diff --staged --quiet; then
+            echo "No changes to commit"
+          else
+            git commit -m "🚀 Update deployment image to ${{ needs.build-and-push.outputs.new_tag }}"
+            git push origin HEAD:${{ github.ref_name }}
+            echo "✅ Deployment manifest updated successfully!"
+          fi
+
+      - name: Summary
+        run: |
+          echo "## 🎉 Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **New Docker Image:** \`${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-push.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **DockerHub Link:** https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Deployment Updated:** \`k8s/deployment.yaml\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Git Tag Created:** \`${{ needs.build-and-push.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "ArgoCD will automatically sync the new image! 🔄" >> $GITHUB_STEP_SUMMARY

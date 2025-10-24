@@ -1,0 +1,109 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Music Dashboard</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Video Background -->
+    <div class="video-background">
+        <video autoplay muted loop playsinline id="bgVideo">
+            <source src="media/video.mp4" type="video/mp4">
+        </video>
+        <div class="video-overlay"></div>
+    </div>
+
+    <div class="container">
+        <header>
+            <div class="header-meta">
+                <span class="author">👤 Created by Akash</span>
+                <span class="version">v1.0.0</span>
+            </div>
+            <h1>🎵 Music Dashboard</h1>
+            <p class="subtitle">Your Personal Music Collection</p>
+        </header>
+
+        <main>
+            <!-- Music Player Section -->
+            <section class="player-section">
+                <div class="player-card">
+                    <div class="album-art">
+                        <img id="albumArt" src="media/bgimage.jpg" alt="Album Art">
+                    </div>
+                    <div class="player-controls">
+                        <h2 id="songTitle">Select a song</h2>
+                        <audio id="audioPlayer" controls>
+                            Your browser does not support the audio element.
+                        </audio>
+                        <div class="progress-bar">
+                            <div id="progress" class="progress"></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Playlist Section -->
+            <section class="playlist-section">
+                <h2>📀 Playlist</h2>
+                <div class="playlist">
+                    <div class="song-item" onclick="playSong('media/song1.mp3', 'Bad Boys Good Sons', 'media/song1-album-image.png')">
+                        <div class="song-info">
+                            <img src="media/song1-album-image.png" alt="Album" class="song-thumbnail">
+                            <div>
+                                <h3>Bad Boys Good Sons</h3>
+                                <p>Dabeull & Sofiane Pamart • 2021</p>
+                            </div>
+                        </div>
+                        <button class="play-btn">▶</button>
+                    </div>
+                    <div class="song-item" onclick="playSong('media/song2.mp3', 'Eye For an Eye (Main Theme)', 'media/song2-album-image.png')">
+                        <div class="song-info">
+                            <img src="media/song2-album-image.png" alt="Album" class="song-thumbnail">
+                            <div>
+                                <h3>Eye For an Eye (Main Theme)</h3>
+                                <p>Rina Sawayama • 2023</p>
+                            </div>
+                        </div>
+                        <button class="play-btn">▶</button>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Video Section -->
+            <section class="video-section">
+                <h2>🎬 Video Player</h2>
+                <div class="video-container">
+                    <video id="videoPlayer" controls>
+                        <source src="media/video.mp4" type="video/mp4">
+                        Your browser does not support the video element.
+                    </video>
+                </div>
+            </section>
+
+            <!-- Stats Section -->
+            <section class="stats-section">
+                <div class="stat-card">
+                    <h3>2</h3>
+                    <p>Songs</p>
+                </div>
+                <div class="stat-card">
+                    <h3>1</h3>
+                    <p>Video</p>
+                </div>
+                <div class="stat-card">
+                    <h3>3</h3>
+                    <p>Total Media</p>
+                </div>
+            </section>
+        </main>
+
+        <footer>
+            <p>&copy; 2025 Music Dashboard. Built with ❤️</p>
+        </footer>
+    </div>
+
+    <script src="script.js"></script>
+</body>
+</html>
