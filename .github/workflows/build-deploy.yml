@@ -128,7 +128,7 @@ jobs:
     name: Deploy to DEV
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.ref == 'refs/heads/dev' || github.event.inputs.environment == 'dev'
+    if: github.ref != 'refs/heads/main' || github.event.inputs.environment == 'dev'
     environment:
       name: dev
       url: https://dev.yourdomain.com
@@ -144,8 +144,8 @@ jobs:
           NEW_TAG="${{ needs.build-and-test.outputs.new_tag }}"
           
           # Update the image tag in dev overlay
-          if [ -f "k8s/overlays/dev/deployment.yaml" ]; then
-            sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/overlays/dev/deployment.yaml
+          if [ -f "k8s/overlays/dev/kustomization.yaml" ]; then
+            sed -i "s|newTag: .*|newTag: ${NEW_TAG}|g" k8s/overlays/dev/kustomization.yaml
           else
             # Update base deployment if overlay doesn't exist
             sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/deployment.yaml
@@ -186,7 +186,7 @@ jobs:
     name: Deploy to QA
     runs-on: ubuntu-latest
     needs: build-and-test
-    if: github.ref == 'refs/heads/main' || github.event.inputs.environment == 'qa'
+    if: github.ref == 'refs/heads/main'
     environment:
       name: qa
       url: https://qa.yourdomain.com
@@ -202,8 +202,8 @@ jobs:
           NEW_TAG="${{ needs.build-and-test.outputs.new_tag }}"
           
           # Update the image tag in qa overlay
-          if [ -f "k8s/overlays/qa/deployment.yaml" ]; then
-            sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/overlays/qa/deployment.yaml
+          if [ -f "k8s/overlays/qa/kustomization.yaml" ]; then
+            sed -i "s|newTag: .*|newTag: ${NEW_TAG}|g" k8s/overlays/qa/kustomization.yaml
           else
             # Update base deployment if overlay doesn't exist
             sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/deployment.yaml
@@ -244,7 +244,7 @@ jobs:
     name: Send Deployment Notifications
     runs-on: ubuntu-latest
     needs: [build-and-test, deploy-dev, deploy-qa]
-    if: always()
+    if: always() && (github.ref == 'refs/heads/main' || success())
     
     steps:
       - name: Deployment Status
@@ -256,3 +256,4 @@ jobs:
           echo "- **QA Deploy:** ${{ needs.deploy-qa.result }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "**DockerHub:** https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
+          echo "**GitHub Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
