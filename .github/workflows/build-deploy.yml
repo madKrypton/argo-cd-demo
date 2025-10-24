@@ -3,16 +3,12 @@ name: Multi-Stage CI/CD Pipeline
 on:
   push:
     branches:
-      - dev
       - main
+      - '**'    # include all branches, we’ll handle filtering via conditions
     paths:
       - 'app/**'
       - 'Dockerfile'
       - '.github/workflows/build-deploy.yml'
-  pull_request:
-    branches:
-      - dev
-      - main
   workflow_dispatch:
     inputs:
       environment:
@@ -36,16 +32,16 @@ env:
 
 jobs:
   # ============================================
-  # Build and Test Stage
+  # Build and Push Docker Image
   # ============================================
-  build-and-test:
-    name: Build, Test & Push Docker Image
+  build:
+    name: Build and Push Image
     runs-on: ubuntu-latest
     outputs:
-      new_tag: ${{ steps.increment_tag.outputs.new_tag }}
-      short_sha: ${{ steps.vars.outputs.short_sha }}
+      image_tag: ${{ steps.set_tag.outputs.image_tag }}
       branch_name: ${{ steps.vars.outputs.branch_name }}
-    
+      short_sha: ${{ steps.vars.outputs.short_sha }}
+
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
@@ -56,11 +52,8 @@ jobs:
       - name: Set build variables
         id: vars
         run: |
-          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
           echo "branch_name=${GITHUB_REF#refs/heads/}" >> $GITHUB_OUTPUT
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+          echo "short_sha=$(git rev-parse --short HEAD)" >> $GITHUB_OUTPUT
 
       - name: Login to DockerHub
         uses: docker/login-action@v3
@@ -68,37 +61,15 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Get latest Git tag and increment version
-        id: increment_tag
+      - name: Set image tag
+        id: set_tag
         run: |
-          # Fetch all tags
-          git fetch --tags
-          
-          # Get the latest tag matching v* pattern
-          LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
-          
-          if [ -z "$LATEST_TAG" ]; then
-            # No tags found, start with v10
-            NEW_TAG="v10"
-          else
-            # Extract version number and increment
-            VERSION=${LATEST_TAG#v}
-            NEW_VERSION=$((VERSION + 1))
-            NEW_TAG="v${NEW_VERSION}"
-          fi
-          
-          echo "Latest tag: $LATEST_TAG"
-          echo "New tag: $NEW_TAG"
-          echo "new_tag=$NEW_TAG" >> $GITHUB_OUTPUT
-          echo "NEW_TAG=$NEW_TAG" >> $GITHUB_ENV
-
-      - name: Set PR number
-        id: pr
-        run: |
-          PR_NUMBER=$(echo $GITHUB_REF | sed -n 's/refs\/pull\/\([0-9]*\)\/merge/\1/p')
-          if [ ! -z "$PR_NUMBER" ]; then
-            echo "number=$PR_NUMBER" >> $GITHUB_OUTPUT
-          fi
+          BRANCH="${GITHUB_REF#refs/heads/}"
+          CLEAN_BRANCH=$(echo "$BRANCH" | tr '/' '-')
+          # Use run_number for incremental versioning
+          TAG="${CLEAN_BRANCH}-${GITHUB_RUN_NUMBER}"
+          echo "Image tag: $TAG"
+          echo "image_tag=$TAG" >> $GITHUB_OUTPUT
 
       - name: Build and push Docker image
         uses: docker/build-push-action@v5
@@ -107,153 +78,95 @@ jobs:
           file: ./Dockerfile
           push: true
           tags: |
-            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.increment_tag.outputs.new_tag }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.event_name == 'pull_request' && format('pr-{0}', steps.pr.outputs.number) || format('{0}-{1}', steps.vars.outputs.branch_name, steps.vars.outputs.short_sha) }}
-            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ github.event_name == 'pull_request' && format('pr-{0}-latest', steps.pr.outputs.number) || format('{0}-latest', steps.vars.outputs.branch_name) }}
-          cache-from: type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache
-          cache-to: type=registry,ref=${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:buildcache,mode=max
-
-      - name: Create and push Git tag
-        if: github.ref == 'refs/heads/main'
-        run: |
-          git config user.name "GitHub Actions Bot"
-          git config user.email "github-actions[bot]@users.noreply.github.com"
-          git tag -a ${{ steps.increment_tag.outputs.new_tag }} -m "Release ${{ steps.increment_tag.outputs.new_tag }}"
-          git push origin ${{ steps.increment_tag.outputs.new_tag }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.set_tag.outputs.image_tag }}
+            ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ steps.vars.outputs.branch_name }}-latest
 
   # ============================================
-  # Deploy to DEV Environment
+  # Deploy to DEV
   # ============================================
   deploy-dev:
     name: Deploy to DEV
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: build
     if: github.ref != 'refs/heads/main' || github.event.inputs.environment == 'dev'
     environment:
       name: dev
       url: https://dev.yourdomain.com
-    
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.MUSICAPP_GITHUB_TOKEN }}
 
-      - name: Update DEV deployment manifest
+      - name: Update DEV manifest
         run: |
-          NEW_TAG="${{ needs.build-and-test.outputs.new_tag }}"
-          
-          # Update the image tag in dev overlay
+          NEW_TAG="${{ needs.build.outputs.image_tag }}"
+          echo "Updating dev manifest with tag $NEW_TAG"
+
           if [ -f "k8s/overlays/dev/kustomization.yaml" ]; then
             sed -i "s|newTag: .*|newTag: ${NEW_TAG}|g" k8s/overlays/dev/kustomization.yaml
-          else
-            # Update base deployment if overlay doesn't exist
-            sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/deployment.yaml
           fi
-          
-          echo "✅ Updated DEV deployment with image tag: ${NEW_TAG}"
 
-      - name: Commit and push DEV changes
+      - name: Commit & push changes
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           git add k8s/
-          
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "🚀 [DEV] Update deployment to ${{ needs.build-and-test.outputs.new_tag }}"
+            git commit -m "🚀 [DEV] Update deployment to ${{ needs.build.outputs.image_tag }}"
             git push origin HEAD:${{ github.ref_name }}
-            echo "✅ DEV manifest updated successfully!"
           fi
 
-      - name: DEV Deployment Summary
-        run: |
-          echo "## 🟢 DEV Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** DEV" >> $GITHUB_STEP_SUMMARY
-          echo "- **Docker Image:** \`${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-test.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit SHA:** \`${{ needs.build-and-test.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Branch:** \`${{ needs.build-and-test.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "ArgoCD will automatically sync to DEV! 🔄" >> $GITHUB_STEP_SUMMARY
-
   # ============================================
-  # Deploy to QA Environment
+  # Deploy to QA (only main branch + approval)
   # ============================================
   deploy-qa:
     name: Deploy to QA
     runs-on: ubuntu-latest
-    needs: build-and-test
+    needs: [build, deploy-dev]
     if: github.ref == 'refs/heads/main'
     environment:
       name: qa
       url: https://qa.yourdomain.com
-    
+      # 🔸 Configure "qa" environment in GitHub → Settings → Environments → qa → Add required reviewers for approval
     steps:
-      - name: Checkout code
+      - name: Checkout repo
         uses: actions/checkout@v4
-        with:
-          token: ${{ secrets.MUSICAPP_GITHUB_TOKEN }}
 
-      - name: Update QA deployment manifest
+      - name: Update QA manifest
         run: |
-          NEW_TAG="${{ needs.build-and-test.outputs.new_tag }}"
-          
-          # Update the image tag in qa overlay
+          NEW_TAG="${{ needs.build.outputs.image_tag }}"
+          echo "Updating QA manifest with tag $NEW_TAG"
+
           if [ -f "k8s/overlays/qa/kustomization.yaml" ]; then
             sed -i "s|newTag: .*|newTag: ${NEW_TAG}|g" k8s/overlays/qa/kustomization.yaml
-          else
-            # Update base deployment if overlay doesn't exist
-            sed -i "s|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:.*|image: ${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${NEW_TAG}|g" k8s/deployment.yaml
           fi
-          
-          echo "✅ Updated QA deployment with image tag: ${NEW_TAG}"
 
-      - name: Commit and push QA changes
+      - name: Commit & push changes
         run: |
           git config user.name "GitHub Actions Bot"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          
           git add k8s/
-          
           if git diff --staged --quiet; then
             echo "No changes to commit"
           else
-            git commit -m "🚀 [QA] Update deployment to ${{ needs.build-and-test.outputs.new_tag }}"
+            git commit -m "🚀 [QA] Update deployment to ${{ needs.build.outputs.image_tag }}"
             git push origin HEAD:${{ github.ref_name }}
-            echo "✅ QA manifest updated successfully!"
           fi
 
-      - name: QA Deployment Summary
-        run: |
-          echo "## 🟡 QA Deployment Summary" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Environment:** QA" >> $GITHUB_STEP_SUMMARY
-          echo "- **Docker Image:** \`${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}:${{ needs.build-and-test.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Commit SHA:** \`${{ needs.build-and-test.outputs.short_sha }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "- **Git Tag:** \`${{ needs.build-and-test.outputs.new_tag }}\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "ArgoCD will automatically sync to QA! 🔄" >> $GITHUB_STEP_SUMMARY
-
   # ============================================
-  # Notification Stage (Optional)
+  # Notify Stage
   # ============================================
   notify:
-    name: Send Deployment Notifications
+    name: Notify Summary
     runs-on: ubuntu-latest
-    needs: [build-and-test, deploy-dev, deploy-qa]
-    if: always() && (github.ref == 'refs/heads/main' || success())
-    
+    needs: [build, deploy-dev, deploy-qa]
+    if: always()
     steps:
-      - name: Deployment Status
+      - name: Deployment Summary
         run: |
-          echo "## 📢 Deployment Pipeline Complete" >> $GITHUB_STEP_SUMMARY
+          echo "## ✅ Deployment Summary" >> $GITHUB_STEP_SUMMARY
+          echo "- Branch: \`${{ needs.build.outputs.branch_name }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- Tag: \`${{ needs.build.outputs.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- DockerHub: https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "- **Build Status:** ${{ needs.build-and-test.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **DEV Deploy:** ${{ needs.deploy-dev.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "- **QA Deploy:** ${{ needs.deploy-qa.result }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "**DockerHub:** https://hub.docker.com/r/${{ env.DOCKERHUB_USERNAME }}/${{ env.IMAGE_NAME }}" >> $GITHUB_STEP_SUMMARY
-          echo "**GitHub Repository:** ${{ github.repository }}" >> $GITHUB_STEP_SUMMARY
