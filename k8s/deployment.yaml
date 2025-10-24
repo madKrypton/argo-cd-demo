@@ -19,7 +19,7 @@ spec:
     spec:
       containers:
       - name: music-dashboard
-        image: appukuttan/mastersong:v11
+        image: appukuttan/mastersong:v12
         imagePullPolicy: Always
         ports:
         - containerPort: 80
