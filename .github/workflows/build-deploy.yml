@@ -43,7 +43,7 @@ jobs:
           username: ${{ env.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
-      - name: Get current tag and increment
+      - name: Get latest Git tag and increment version
         id: increment_tag
         run: |
           # Fetch all tags
@@ -53,8 +53,8 @@ jobs:
           LATEST_TAG=$(git tag -l "v*" | sort -V | tail -n1)
           
           if [ -z "$LATEST_TAG" ]; then
-            # No tags found, start with v1
-            NEW_TAG="v1"
+            # No tags found, start with v10
+            NEW_TAG="v10"
           else
             # Extract version number and increment
             VERSION=${LATEST_TAG#v}
