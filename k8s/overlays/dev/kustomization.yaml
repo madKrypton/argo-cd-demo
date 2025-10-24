@@ -21,7 +21,7 @@ replicas:
 
 images:
   - name: appukuttan/mastersong
-    newTag: main-13
+    newTag: main-15
 
 patches:
   - patch: |-
