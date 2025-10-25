@@ -11,10 +11,9 @@ labels:
       managed-by: argocd
 
 resources:
-  - ../../
-  - ../../../k8s/deployment.yaml
-  - ../../../k8s/service.yaml
-  - ../../../k8s/configmap.yaml
+  - ../../deployment.yaml
+  - ../../service.yaml
+  - ../../configmap.yaml
 
 replicas:
   - name: music-dashboard
