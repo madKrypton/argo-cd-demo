@@ -18,11 +18,13 @@ spec:
       server: https://kubernetes.default.svc
   
   # Cluster resource whitelist
+  # Only 'Namespace' is whitelisted to restrict cluster-wide changes and enhance security.
   clusterResourceWhitelist:
     - group: ''
       kind: Namespace
-  
   # Namespace resource whitelist
+  # Only essential resources for application deployment and configuration are allowed:
+  # Service, ConfigMap, Secret, Deployment, and Ingress.
   namespaceResourceWhitelist:
     - group: ''
       kind: Service

@@ -1,11 +1,13 @@
-# Setup Guide for GitHub Actions CI/CD
+# Setup Guide for GitHub Actions CI/CD with ArgoCD and Kustomize
 
-## Quick Setup Checklist
+## 🚀 Quick Setup Checklist
 
 - [ ] Create DockerHub Access Token
-- [ ] Add GitHub Secrets
-- [ ] Verify pipeline configuration
-- [ ] Test pipeline run
+- [ ] Configure GitHub Repository Secrets
+- [ ] Set Up ArgoCD Applications
+- [ ] Verify Pipeline Configuration
+- [ ] Test Initial Deployment
+- [ ] Validate Multi-Environment Setup
 
 ## 📝 Step-by-Step Setup
 
@@ -50,16 +52,49 @@
    - **Secret:** Paste your DockerHub access token
    - Click **Add secret**
 
-### Step 3: Verify Configuration
+### Step 3: ArgoCD Application Setup
 
-Check that your secrets are added:
-```
-Settings → Secrets and variables → Actions → Repository secrets
-```
+1. **Deploy ArgoCD Applications**
+   ```bash
+   # Deploy project
+   kubectl apply -f argocd-application/project.yaml
+   
+   # Deploy dev environment
+   kubectl apply -f argocd-application/dev-application.yaml
+   
+   # Deploy qa environment
+   kubectl apply -f argocd-application/qa-application.yaml
+   ```
 
-You should see:
-- ✅ `DOCKERHUB_USERNAME`
-- ✅ `DOCKERHUB_TOKEN`
+2. **Verify Applications**
+   ```bash
+   # Check ArgoCD applications
+   kubectl get applications -n argocd
+   
+   # Should see:
+   # music-dashboard-dev   Synced   Healthy
+   # music-dashboard-qa    Synced   Healthy
+   ```
+
+### Step 4: Verify Configuration
+
+1. **Check GitHub Secrets**
+   ```
+   Settings → Secrets and variables → Actions → Repository secrets
+   ```
+   Should see:
+   - ✅ `DOCKERHUB_USERNAME`
+   - ✅ `DOCKERHUB_TOKEN`
+
+2. **Verify Kustomize Structure**
+   ```bash
+   # Check base resources
+   ls -la k8s/base/
+   
+   # Check environment overlays
+   ls -la k8s/overlays/dev/
+   ls -la k8s/overlays/qa/
+   ```
 
 ### Step 4: Test the Pipeline
 
@@ -92,80 +127,128 @@ git push origin main
 ### Current Settings
 
 ```yaml
-DOCKERHUB_USERNAME: appukuttan
-IMAGE_NAME: mastersong
-Starting Tag: v1 (auto-increments to v2, v3, etc.)
-```
-
-### If You Need to Change Settings
-
-Edit `.github/workflows/build-deploy.yml`:
-
-```yaml
 env:
-  DOCKERHUB_USERNAME: appukuttan    # Change to your DockerHub username
-  IMAGE_NAME: mastersong            # Change to your image name
+  DOCKERHUB_USERNAME: appukuttan
+  IMAGE_NAME: mastersong
+  IMAGE_TAG: main-${{ github.run_number }}  # Automatically increments with each run
 ```
 
-## 🔍 What Happens When Pipeline Runs
+### Environment-Specific Settings
+
+#### Development Environment
+```yaml
+# k8s/overlays/dev/kustomization.yaml
+namePrefix: dev-
+namespace: music-app-dev
+replicas:
+  - name: music-dashboard
+    count: 2
+resources:
+  - ../../base
+```
+
+#### QA Environment
+```yaml
+# k8s/overlays/qa/kustomization.yaml
+namePrefix: qa-
+namespace: music-app-qa
+replicas:
+  - name: music-dashboard
+    count: 3
+resources:
+  - ../../base
+```
+
+## 🔍 CI/CD Pipeline Workflow
 
 ### Stage 1: Build and Push
 1. ✅ Checks out code
-2. ✅ Finds latest Git tag (e.g., `v1`)
-3. ✅ Increments tag to `v2`
-4. ✅ Builds Docker image
-5. ✅ Pushes to DockerHub as:
-   - `appukuttan/mastersong:v2`
+2. ✅ Sets up Docker Buildx
+3. ✅ Logs in to DockerHub
+4. ✅ Builds Docker image with tag `main-${run_number}`
+5. ✅ Pushes to DockerHub:
+   - `appukuttan/mastersong:main-${run_number}`
    - `appukuttan/mastersong:latest`
-6. ✅ Creates Git tag `v2`
 
-### Stage 2: Update Kubernetes
-1. ✅ Updates `k8s/deployment.yaml`
-2. ✅ Changes image from `v1` to `v2`
-3. ✅ Commits change with message: "🚀 Update deployment image to v2"
+### Stage 2: Update Kustomize Overlays
+1. ✅ Updates image tag in dev overlay:
+   ```yaml
+   # k8s/overlays/dev/kustomization.yaml
+   images:
+     - name: appukuttan/mastersong
+       newTag: main-${run_number}
+   ```
+2. ✅ Updates image tag in qa overlay
+3. ✅ Commits changes with message: "🚀 Update image to main-${run_number}"
 4. ✅ Pushes to repository
 
-### Stage 3: ArgoCD (Automatic)
-1. ✅ ArgoCD detects change in deployment.yaml
-2. ✅ Automatically syncs new image
-3. ✅ Kubernetes pulls `appukuttan/mastersong:v2`
-4. ✅ Pods restart with new image
+### Stage 3: ArgoCD Sync (Automatic)
+1. ✅ ArgoCD detects changes in overlays
+2. ✅ Syncs dev environment:
+   - Updates image tag
+   - Maintains dev-specific configurations
+3. ✅ Syncs qa environment:
+   - Updates image tag
+   - Maintains qa-specific configurations
+4. ✅ Pods roll out with new image in both environments
 
-## 🎯 Verify Everything Works
+## 🎯 Verification Steps
 
-### 1. Check DockerHub
-- Go to: https://hub.docker.com/r/appukuttan/mastersong
-- You should see new tag (e.g., `v2`)
-
-### 2. Check Git Tags
+### 1. Check DockerHub Images
 ```bash
-git fetch --tags
-git tag -l
-# Should show: v1, v2, v3, etc.
+# Check latest image
+docker pull appukuttan/mastersong:latest
+
+# Check specific run version
+docker pull appukuttan/mastersong:main-${run_number}
 ```
 
-### 3. Check Deployment File
+### 2. Verify Kustomize Overlays
 ```bash
-cat k8s/deployment.yaml | grep image:
-# Should show: image: appukuttan/mastersong:v2
+# Preview dev manifests
+kubectl kustomize k8s/overlays/dev
+
+# Preview qa manifests
+kubectl kustomize k8s/overlays/qa
 ```
 
-### 4. Check ArgoCD
+### 3. Check ArgoCD Applications
 ```bash
-kubectl get application music-dashboard -n argocd
-# STATUS should be: Synced
+# Check dev environment
+kubectl get application music-dashboard-dev -n argocd
+kubectl get pods -n music-app-dev
+
+# Check qa environment
+kubectl get application music-dashboard-qa -n argocd
+kubectl get pods -n music-app-qa
 ```
 
-## 🐛 Troubleshooting
+### 4. Monitor Deployments
+```bash
+# Watch dev pods
+kubectl get pods -n music-app-dev -w
 
-### Error: "DockerHub authentication failed"
+# Watch qa pods
+kubectl get pods -n music-app-qa -w
+```
 
-**Cause:** Invalid DockerHub credentials
+## 🐛 Troubleshooting Guide
 
-**Solution:**
-1. Verify your DockerHub token is correct
-2. Create a new token if needed
-3. Update `DOCKERHUB_TOKEN` secret in GitHub
+### 1. Pipeline Issues
+
+#### DockerHub Authentication Failed
+```bash
+# Verify DockerHub login
+docker login -u $DOCKERHUB_USERNAME
+```
+- Check GitHub secret values
+- Regenerate DockerHub token if needed
+- Update `DOCKERHUB_TOKEN` in GitHub secrets
+
+#### GitHub Actions Permission Error
+1. Go to Repository Settings → Actions → General
+2. Enable "Read and write permissions"
+3. Allow GitHub Actions to create PRs
 
 ### Error: "Permission denied (push to repository)"
 
@@ -178,17 +261,27 @@ kubectl get application music-dashboard -n argocd
 4. Check: **Allow GitHub Actions to create and approve pull requests**
 5. Click **Save**
 
-### Error: "Tag already exists"
+### 2. ArgoCD Sync Issues
 
-**Cause:** Git tag already created
-
-**Solution:**
+#### Application Not Syncing
 ```bash
-# Delete local and remote tag
-git tag -d v2
-git push origin :refs/tags/v2
+# Check app status
+argocd app get music-dashboard-dev
 
-# Or just let pipeline increment to v3
+# Check sync errors
+kubectl logs -n argocd -l app.kubernetes.io/name=argocd-application-controller
+
+# Force sync if needed
+argocd app sync music-dashboard-dev
+```
+
+#### Kustomize Build Errors
+```bash
+# Test kustomize locally
+kubectl kustomize k8s/overlays/dev
+kubectl kustomize k8s/overlays/qa
+
+# Check kustomization.yaml syntax
 ```
 
 ### Warning: "No changes to commit"
@@ -197,36 +290,74 @@ git push origin :refs/tags/v2
 
 **Solution:** This is normal if the pipeline runs twice with same tag
 
-## 📊 Pipeline Badges
+## 📊 Monitoring and Status
 
-Add to your README to show build status:
-
+### Pipeline Status Badge
 ```markdown
 [![Build and Deploy](https://github.com/madKrypton/argo-cd-demo/actions/workflows/build-deploy.yml/badge.svg)](https://github.com/madKrypton/argo-cd-demo/actions)
 ```
 
-## 🔐 Security Notes
+### Real-time Monitoring
+```bash
+# Watch pipeline runs
+open https://github.com/madKrypton/argo-cd-demo/actions
 
-- ✅ Secrets are encrypted by GitHub
-- ✅ Secrets are not visible in logs
-- ✅ DockerHub token can be revoked anytime
-- ✅ Use minimal permissions for tokens
+# Monitor ArgoCD sync status
+kubectl port-forward svc/argocd-server -n argocd 8080:443
+# Then open: https://localhost:8080
 
-## 📝 Next Steps
+# Watch deployments
+kubectl get pods -n music-app-dev -w
+kubectl get pods -n music-app-qa -w
+```
 
-After successful setup:
+## 🔐 Security Best Practices
 
-1. Make changes to your app code
-2. Commit and push to main/master
-3. Pipeline automatically:
-   - Builds new image
-   - Increments version
-   - Updates deployment
-4. ArgoCD automatically deploys new version
+- ✅ Use encrypted GitHub secrets
+- ✅ Rotate DockerHub tokens regularly
+- ✅ Implement least privilege access
+- ✅ Monitor ArgoCD audit logs
+- ✅ Use separate namespaces for environments
 
-## 🆘 Need Help?
+## 📝 Development Workflow
 
-- Check pipeline logs in Actions tab
-- Review this setup guide
-- Verify all secrets are set correctly
-- Ensure DockerHub credentials are valid
+1. **Make Code Changes**
+   ```bash
+   # Edit application code
+   cd app/
+   # Make your changes
+   ```
+
+2. **Commit and Push**
+   ```bash
+   git add .
+   git commit -m "feat: your feature description"
+   git push origin main
+   ```
+
+3. **Automatic Pipeline Flow**
+   - GitHub Actions builds new image
+   - Updates Kustomize overlays
+   - ArgoCD detects changes
+   - Syncs both environments
+   - Rolls out new version
+
+4. **Monitor Deployment**
+   ```bash
+   # Check build status
+   open https://github.com/madKrypton/argo-cd-demo/actions
+
+   # Monitor ArgoCD sync
+   kubectl get applications -n argocd -w
+
+   # Watch pods update
+   kubectl get pods -n music-app-dev -w
+   ```
+
+## 🆘 Support and Resources
+
+- [ArgoCD Documentation](https://argo-cd.readthedocs.io/)
+- [Kustomize Documentation](https://kubectl.docs.kubernetes.io/guides/introduction/kustomize/)
+- [GitHub Actions Documentation](https://docs.github.com/en/actions)
+- Pipeline logs in GitHub Actions tab
+- ArgoCD UI for detailed sync status
