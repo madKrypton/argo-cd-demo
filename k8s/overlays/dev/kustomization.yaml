@@ -5,14 +5,16 @@ namespace: music-app-dev
 
 namePrefix: dev-
 
-commonLabels:
-  environment: dev
-  managed-by: argocd
+labels:
+  - pairs:
+      environment: dev
+      managed-by: argocd
 
 resources:
-  - ../../deployment.yaml
-  - ../../service.yaml
-  - ../../configmap.yaml
+  - ../../
+  - ../../../k8s/deployment.yaml
+  - ../../../k8s/service.yaml
+  - ../../../k8s/configmap.yaml
 
 replicas:
   - name: music-dashboard
