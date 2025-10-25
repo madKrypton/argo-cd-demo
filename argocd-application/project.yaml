@@ -12,7 +12,7 @@ spec:
   
   # Allowed destinations
   destinations:
-    - namespace: music-dashboard
+    - namespace: music-app-dev
       server: https://kubernetes.default.svc
     - namespace: argocd
       server: https://kubernetes.default.svc

@@ -10,7 +10,6 @@ commonLabels:
   managed-by: argocd
 
 resources:
-  - ../../namespace.yaml
   - ../../deployment.yaml
   - ../../service.yaml
   - ../../configmap.yaml
