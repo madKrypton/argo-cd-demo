@@ -11,9 +11,7 @@ labels:
       managed-by: argocd
 
 resources:
-  - ../../deployment.yaml
-  - ../../service.yaml
-  - ../../configmap.yaml
+  - ../../base
 
 replicas:
   - name: music-dashboard
