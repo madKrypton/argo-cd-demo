@@ -1,37 +1,74 @@
 # Kubernetes Deployment for Music Dashboard
 
-This folder contains Kubernetes manifests for deploying the Music Dashboard application on Minikube.
+This folder contains Kubernetes manifests for deploying the Music Dashboard application using Kustomize overlays for different environments.
+
+## 📂 Directory Structure
+
+```
+k8s/
+├── base/                   # Base Kubernetes configurations
+│   ├── namespace.yaml     # Namespace definition
+│   ├── deployment.yaml    # Main application deployment
+│   ├── service.yaml       # Service configuration
+│   ├── configmap.yaml     # Application configuration
+│   └── kustomization.yaml # Base kustomization file
+└── overlays/              # Environment-specific overlays
+    ├── dev/              # Development environment
+    │   └── kustomization.yaml
+    └── qa/               # QA environment
+        └── kustomization.yaml
+```
+
+## 🌟 Environment Configurations
+
+### Development (dev)
+- **Namespace:** `music-app-dev`
+- **Resource Prefix:** `dev-`
+- **Replicas:** 2
+- **Resources:**
+  - Memory Requests: 64Mi
+  - Memory Limits: 128Mi
+
+### QA
+- **Namespace:** `music-app-qa`
+- **Resource Prefix:** `qa-`
+- **Replicas:** 3
+- **Resources:**
+  - Memory Requests: 128Mi
+  - Memory Limits: 256Mi
+  - CPU Requests: 200m
+  - CPU Limits: 500m
 
 ## 📦 Image Information
 
-- **Docker Image:** `appukuttan/mastersong:v1`
-- **Application Version:** v1.0.0
+- **Docker Image:** `appukuttan/mastersong`
 - **Author:** Akash
 
-## 📁 Files
+## 🚀 Deployment with Kustomize
 
-- `namespace.yaml` - Creates a dedicated namespace for the application
-- `deployment.yaml` - Deployment configuration with 3 replicas
-- `service.yaml` - NodePort service exposing the application
-- `ingress.yaml` - Ingress configuration for external access
-- `configmap.yaml` - Configuration data for the application
+### Testing Configurations
 
-## 🚀 Minikube Setup
+You can preview the generated manifests for each environment using:
 
-### Start Minikube
+```bash
+# Preview dev environment manifests
+kubectl kustomize overlays/dev
 
-```powershell
-# Start Minikube
-minikube start
-
-# Enable ingress addon (optional)
-minikube addons enable ingress
-
-# Verify cluster is running
-kubectl cluster-info
+# Preview qa environment manifests
+kubectl kustomize overlays/qa
 ```
 
-## � Deployment Instructions
+### Manual Deployment (if not using ArgoCD)
+
+```bash
+# Deploy to dev environment
+kubectl apply -k overlays/dev
+
+# Deploy to qa environment
+kubectl apply -k overlays/qa
+```
+
+## 🔄 ArgoCD Integration
 
 ### Option 1: Deploy All Resources at Once
 
@@ -138,23 +175,24 @@ minikube ip
 
 ## 🔄 Update Deployment
 
-To update to a new version:
+To update the application version:
 
+1. Update the image tag in the respective environment's kustomization.yaml:
+
+```yaml
+# k8s/overlays/dev/kustomization.yaml or k8s/overlays/qa/kustomization.yaml
+images:
+  - name: appukuttan/mastersong
+    newTag: main-19  # Update this to the desired version
+```
+
+2. Commit and push the changes
+3. ArgoCD will automatically detect and apply the changes
+
+For manual deployments:
 ```bash
-# Update image tag
-kubectl set image deployment/music-dashboard -n music-dashboard music-dashboard=appukuttan/mastersong:v2
-
-# Or edit the deployment
-kubectl edit deployment music-dashboard -n music-dashboard
-
-# Check rollout status
-kubectl rollout status deployment/music-dashboard -n music-dashboard
-
-# View rollout history
-kubectl rollout history deployment/music-dashboard -n music-dashboard
-
-# Rollback if needed
-kubectl rollout undo deployment/music-dashboard -n music-dashboard
+# After updating kustomization.yaml, apply the changes
+kubectl apply -k overlays/dev  # or overlays/qa
 ```
 
 ## 🔧 Scale Application

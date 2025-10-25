@@ -5,15 +5,13 @@ namespace: music-app-qa
 
 namePrefix: qa-
 
-commonLabels:
-  environment: qa
-  managed-by: argocd
+labels:
+  - pairs:
+      environment: qa
+      managed-by: argocd
 
 resources:
-  - ../../namespace.yaml
-  - ../../deployment.yaml
-  - ../../service.yaml
-  - ../../configmap.yaml
+  - ../../base
 
 replicas:
   - name: music-dashboard

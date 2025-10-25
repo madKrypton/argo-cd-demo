@@ -15,7 +15,7 @@ resources:
 
 replicas:
   - name: music-dashboard
-    count: 2
+    count: 4
 
 images:
   - name: appukuttan/mastersong

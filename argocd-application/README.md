@@ -1,12 +1,36 @@
 # ArgoCD Application Configuration
 
-This folder contains ArgoCD application manifests for deploying the Music Dashboard application using GitOps.
+This folder contains ArgoCD application manifests for deploying the Music Dashboard application using GitOps principles and Kustomize for environment management.
 
-## 📦 Repository Information
+## � Directory Structure
 
-- **Repository:** https://github.com/madKrypton/argo-cd-demo (Public Repository)
-- **Path:** k8s
-- **Author:** Akash### Repository Connection Issues
+```
+argocd-application/
+├── dev-application.yaml    # Development environment application
+├── qa-application.yaml     # QA environment application
+└── project.yaml           # Project definition for both environments
+```
+
+## 🌟 Environment Applications
+
+### Development Environment
+- **Application Name:** `music-dashboard-dev`
+- **Namespace:** `music-app-dev`
+- **Path:** `k8s/overlays/dev`
+- **Configuration:**
+  - Automated sync enabled
+  - Auto-pruning enabled
+  - Self-healing enabled
+  - Namespace auto-creation
+  - 5 retry attempts with exponential backoff
+
+### QA Environment
+- **Application Name:** `music-dashboard-qa`
+- **Namespace:** `music-app-qa`
+- **Path:** `k8s/overlays/qa`
+- **Configuration:**
+  - Same sync policies as dev environment
+  - Different resource configurations (see k8s/README.md)
 
 ```powershell
 # Test repository connection
@@ -16,30 +40,39 @@ argocd repo list
 ```lication:** Music Dashboard v1.0.0
 - **Authentication:** ✅ Not required (public repository)
 
-## 📁 Files
+##  Repository Information
 
-- `application.yaml` - ArgoCD Application definition
-- `project.yaml` - ArgoCD AppProject definition (optional)tion Configuration
+- **Repository:** https://github.com/madKrypton/argo-cd-demo
+- **Type:** Public repository (no authentication required)
+- **Branch:** main (using HEAD revision)
 
-This folder contains ArgoCD application manifests for deploying the Music Dashboard application using GitOps.
+## � Deployment Instructions
 
-## 📦 Repository Information
+### Deploy Applications
 
-- **Repository:** https://dev.azure.com/AkashHaridasan/My-work-at-HRB/_git/argocd-demo-app
-- **Path:** k8s
-- **Author:** Akash
-- **Application:** Music Dashboard v1.0.0
+```bash
+# Deploy the project first
+kubectl apply -f project.yaml
 
-## 📁 Files
+# Deploy development environment
+kubectl apply -f dev-application.yaml
 
-- `application.yaml` - ArgoCD Application definition
-- `project.yaml` - ArgoCD AppProject definition (optional)
-- `repository-secret.yaml` - Repository credentials template for Azure DevOps
-- `AUTHENTICATION.md` - Detailed authentication setup guide
-- `create-secret.ps1` - PowerShell script to create secret
-- `create-secret.sh` - Bash script to create secret
+# Deploy QA environment
+kubectl apply -f qa-application.yaml
+```
 
-## 🚀 Prerequisites
+### Monitor Deployments
+
+```bash
+# Check application status
+kubectl get application -n argocd
+kubectl get application music-dashboard-dev -n argocd
+kubectl get application music-dashboard-qa -n argocd
+
+# View detailed status
+kubectl describe application music-dashboard-dev -n argocd
+kubectl describe application music-dashboard-qa -n argocd
+```
 
 ### 1. Install ArgoCD on Minikube
 
