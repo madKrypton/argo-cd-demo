@@ -15,11 +15,11 @@ resources:
 
 replicas:
   - name: music-dashboard
-    count: 1
+    count: 5
 
 images:
   - name: appukuttan/mastersong
-    newTag: main-19
+    newTag: main-18
 
 patches:
   - patch: |-
