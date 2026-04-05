@@ -1,6 +1,6 @@
 # 🎵 Music Dashboard
 
-A beautiful web-based music dashboard served with nginx in a Docker container.
+A beautiful web-based music dashboard served with nginx in a Docker container, deployed via GitOps using ArgoCD and Kubernetes.
 
 ## Features
 
@@ -11,6 +11,8 @@ A beautiful web-based music dashboard served with nginx in a Docker container.
 - 🎨 Modern, responsive design
 - 🚀 Lightweight nginx server
 - 🐳 Docker containerized
+- ☸️ Kubernetes multi-environment (DEV/QA)
+- 🔄 GitOps with ArgoCD auto-sync
 
 ## Prerequisites
 
@@ -21,7 +23,7 @@ A beautiful web-based music dashboard served with nginx in a Docker container.
 
 ### Option 1: Using Docker Compose (Recommended)
 
-```powershell
+```bash
 # Build and run the container
 docker-compose up -d
 
@@ -34,7 +36,7 @@ docker-compose down
 
 ### Option 2: Using Docker CLI
 
-```powershell
+```bash
 # Build the Docker image
 docker build -t music-dashboard .
 
@@ -62,45 +64,56 @@ http://localhost:8080
 ## Project Structure
 
 ```
-argocd-demo-app/
-├── .github/                   # GitHub Actions CI/CD
+argo-cd-demo/
+├── .github/                        # GitHub Actions CI/CD
 │   └── workflows/
-│       ├── build-deploy.yml  # Main pipeline
-│       ├── README.md         # Pipeline documentation
-│       └── SETUP.md          # Setup instructions
-├── app/                       # Application folder
-│   ├── index.html            # Main HTML file
-│   ├── styles.css            # Styling
-│   ├── script.js             # JavaScript functionality
-│   ├── nginx.conf            # Nginx configuration
-│   └── media/                # Media folder
-│       ├── bgimage.jpg       # Background image
-│       ├── song1-album-image.png  # Album art for Song 1
-│       ├── song2-album-image.png  # Album art for Song 2
-│       ├── song1.mp3         # Bad Boys Good Sons
-│       ├── song2.mp3         # Eye For an Eye
-│       └── video.mp4         # Video file (background)
-├── k8s/                      # Kubernetes manifests
-│   ├── namespace.yaml        # Namespace configuration
-│   ├── deployment.yaml       # Deployment configuration
-│   ├── service.yaml          # Service configuration
-│   ├── ingress.yaml          # Ingress configuration
-│   ├── configmap.yaml        # ConfigMap
-│   └── README.md             # K8s deployment guide
-├── argocd-application/       # ArgoCD GitOps configuration
-│   ├── application.yaml      # ArgoCD Application manifest
-│   ├── project.yaml          # ArgoCD AppProject manifest
-│   ├── repository-secret.yaml # Azure DevOps repo credentials
-│   └── README.md             # ArgoCD setup guide
-├── Dockerfile                # Docker build instructions
-├── docker-compose.yml        # Docker Compose configuration
-├── .dockerignore             # Docker ignore file
-└── README.md                 # This file
+│       ├── build-deploy.yml        # Main multi-stage pipeline
+│       ├── README.md               # Pipeline documentation
+│       └── SETUP.md                # Setup instructions
+├── app/                            # Application source
+│   ├── index.html                  # Main HTML file
+│   ├── styles.css                  # Styling
+│   ├── script.js                   # JavaScript functionality
+│   ├── nginx.conf                  # Nginx configuration
+│   └── media/                      # Media assets
+│       ├── bgimage.jpg             # Background image
+│       ├── song1-album-image.png   # Album art for Song 1
+│       ├── song2-album-image.png   # Album art for Song 2
+│       ├── song1.mp3               # Bad Boys Good Sons
+│       ├── song2.mp3               # Eye For an Eye
+│       └── video.mp4               # Background video
+├── k8s/                            # Kubernetes manifests (Kustomize)
+│   ├── base/                       # Base configuration
+│   │   ├── namespace.yaml
+│   │   ├── deployment.yaml
+│   │   ├── service.yaml
+│   │   ├── configmap.yaml
+│   │   └── kustomization.yaml
+│   ├── overlays/                   # Environment-specific overrides
+│   │   ├── dev/                    # DEV: 5 replicas, lower resources
+│   │   │   └── kustomization.yaml
+│   │   └── qa/                     # QA: 3 replicas, higher resources
+│   │       └── kustomization.yaml
+│   ├── ingress.yaml                # Ingress configuration
+│   └── README.md                   # K8s deployment guide
+├── argocd-application/             # ArgoCD GitOps configuration
+│   ├── application.yaml            # Single ArgoCD Application (default project)
+│   ├── dev-application.yaml        # ArgoCD Application for DEV
+│   ├── qa-application.yaml         # ArgoCD Application for QA
+│   ├── project.yaml                # ArgoCD AppProject (RBAC & resource whitelist)
+│   └── README.md                   # ArgoCD setup guide
+├── _old-worflow/                   # Archived workflow (reference only)
+├── Dockerfile                      # Docker build instructions
+├── docker-compose.yml              # Docker Compose for local dev
+├── .dockerignore                   # Docker ignore file
+├── CICD-GUIDE.md                   # Detailed CI/CD documentation
+├── QUICK-START.md                  # 5-minute setup guide
+└── README.md                       # This file
 ```
 
 ## Docker Commands Cheatsheet
 
-```powershell
+```bash
 # Build image
 docker build -t music-dashboard .
 
@@ -128,26 +141,36 @@ docker exec -it music-dashboard sh
 
 ## 🚢 Kubernetes Deployment (Minikube)
 
-The application can be deployed to Minikube using the manifests in the `k8s/` folder.
+The application uses **Kustomize** with a base + environment overlays structure.
 
 ### Quick Start with Minikube
 
-```powershell
+```bash
 # Start Minikube
 minikube start
 
-# Deploy all resources
-kubectl apply -f k8s/
+# Deploy to DEV environment
+kubectl apply -k k8s/overlays/dev/
+
+# Deploy to QA environment
+kubectl apply -k k8s/overlays/qa/
 
 # Access the application
-minikube service music-dashboard -n music-dashboard
+minikube service dev-music-dashboard -n music-app-dev
 ```
+
+### Environments
+
+| Environment | Namespace      | Replicas | CPU Limits | Memory Limits |
+|-------------|----------------|----------|------------|---------------|
+| DEV         | `music-app-dev` | 5        | 200m       | 128Mi         |
+| QA          | `music-app-qa`  | 3        | 500m       | 256Mi         |
 
 ### Docker Image
 
-- **Image:** `appukuttan/mastersong:v1`
+- **Image:** `appukuttan/mastersong:{branch}-{run_number}` (e.g. `main-19`)
+- **Registry:** Docker Hub
 - **Author:** Akash
-- **Version:** v1.0.0
 - **Service Type:** NodePort (30080)
 
 For detailed Minikube deployment instructions, see [k8s/README.md](k8s/README.md)
@@ -158,76 +181,104 @@ Deploy the application using ArgoCD for automated GitOps workflow.
 
 ### Repository
 
-- **Git Repository:** https://github.com/madKrypton/argo-cd-demo (Public Repository)
-- **Path:** k8s/
-- **Branch:** HEAD (latest)
-- **Authentication:** ✅ Not required (public repository)
+- **Git Repository:** https://github.com/madKrypton/argo-cd-demo (Public)
+- **DEV Path:** `k8s/overlays/dev`
+- **QA Path:** `k8s/overlays/qa`
+- **Authentication:** Not required (public repository)
 
 ### Quick Start with ArgoCD
 
-```powershell
+```bash
 # 1. Install ArgoCD
 kubectl create namespace argocd
 kubectl apply -n argocd -f https://raw.githubusercontent.com/argoproj/argo-cd/stable/manifests/install.yaml
 
-# 2. Deploy application (no authentication needed - it's public!)
-kubectl apply -f argocd-application/application.yaml
+# 2. Create the AppProject
+kubectl apply -f argocd-application/project.yaml
 
-# 3. Access ArgoCD UI
+# 3. Deploy DEV application
+kubectl apply -f argocd-application/dev-application.yaml
+
+# 4. Deploy QA application
+kubectl apply -f argocd-application/qa-application.yaml
+
+# 5. Access ArgoCD UI
 kubectl port-forward svc/argocd-server -n argocd 8080:443
 # Open: https://localhost:8080
 ```
 
-### Features
+### ArgoCD Applications
 
-- **Automated Sync:** Changes in Git automatically deploy
+| App Name               | Namespace       | Source Path        | Project                  |
+|------------------------|-----------------|--------------------|--------------------------|
+| `music-dashboard`      | `music-dashboard` | `k8s/`           | `default`                |
+| `music-dashboard-dev`  | `music-app-dev` | `k8s/overlays/dev` | `music-dashboard-project` |
+| `music-dashboard-qa`   | `music-app-qa`  | `k8s/overlays/qa`  | `music-app`               |
+
+### Sync Features
+
+- **Automated Sync:** Changes in Git automatically deploy within ~3 minutes
 - **Self-Healing:** Reverts manual cluster changes
 - **Auto-Prune:** Removes resources deleted from Git
-- **Retry Logic:** Automatic retries with exponential backoff
+- **Retry Logic:** Automatic retries (up to 5) with exponential backoff (5s → 3m)
+- **Namespace Creation:** Auto-creates target namespaces
 
 For detailed ArgoCD setup instructions, see [argocd-application/README.md](argocd-application/README.md)
 
 ## 🔄 CI/CD Pipeline (GitHub Actions)
 
-Automated build, versioning, and deployment pipeline.
+Automated multi-stage build and deployment pipeline.
+
+### Pipeline Stages
+
+```
+Push to Git
+  → [Build]       Build & push Docker image to DockerHub
+  → [Deploy-DEV]  Update k8s/overlays/dev/kustomization.yaml, commit to Git
+  → [Deploy-QA]   Update k8s/overlays/qa/kustomization.yaml, commit to Git (main only)
+  → [Notify]      Print deployment summary
+         ↓
+  ArgoCD detects Git change → auto-syncs cluster
+```
 
 ### Pipeline Features
 
-- ✅ **Automatic Docker Build** - Builds image on code changes
-- ✅ **Auto Version Increment** - Increments tags (v1 → v2 → v3)
-- ✅ **DockerHub Push** - Pushes to `appukuttan/mastersong`
-- ✅ **K8s Manifest Update** - Auto-updates `k8s/deployment.yaml`
-- ✅ **Git Tagging** - Creates version tags automatically
-- ✅ **ArgoCD Sync** - Triggers automatic deployment
+- ✅ **Automatic Docker Build** — Builds image on `app/**` or `Dockerfile` changes
+- ✅ **Branch-based Versioning** — Tags images as `{branch}-{run_number}` (e.g. `main-19`)
+- ✅ **DockerHub Push** — Pushes to `appukuttan/mastersong`
+- ✅ **Kustomize Manifest Update** — Auto-updates overlay `kustomization.yaml` files
+- ✅ **Multi-environment** — DEV on all branches, QA on `main` only
+- ✅ **ArgoCD Sync** — Triggers automatic deployment via GitOps
+
+### Branch Strategy
+
+| Branch  | DEV Deploy | QA Deploy |
+|---------|-----------|-----------|
+| `main`  | ✅ Yes    | ✅ Yes    |
+| feature | ✅ Yes    | ❌ No     |
 
 ### Quick Setup
 
 1. **Create DockerHub Access Token**
    - Go to DockerHub → Account Settings → Security → New Access Token
-   
+
 2. **Add GitHub Secrets**
    ```
    Repository → Settings → Secrets → Actions
-   Add: DOCKERHUB_USERNAME = appukuttan
-   Add: DOCKERHUB_TOKEN = your_token_here
+   Add: DOCKERHUB_USERNAME     = appukuttan
+   Add: DOCKERHUB_TOKEN        = your_dockerhub_token
+   Add: MUSICAPP_GITHUB_TOKEN  = your_github_pat (needs repo write access)
    ```
 
 3. **Trigger Pipeline**
-   - Push code changes to main/master branch
-   - Or manually trigger from Actions tab
-
-### Pipeline Workflow
-
-```
-Code Push → Build Image → Increment Tag (v1→v2) → Push to DockerHub 
-          → Update deployment.yaml → Commit → ArgoCD Syncs
-```
+   - Push code changes to any branch
+   - Or manually trigger from Actions tab (choose `dev` or `qa` environment)
 
 ### Image Versioning
 
-- **Current:** `appukuttan/mastersong:v1`
-- **Auto-increments to:** `v2`, `v3`, `v4`, etc.
-- **Also tagged as:** `latest`
+- **Format:** `appukuttan/mastersong:{branch}-{run_number}`
+- **Example:** `appukuttan/mastersong:main-19`
+- **Also tagged as:** `appukuttan/mastersong:{branch}-latest`
 
 For detailed pipeline documentation, see [.github/workflows/README.md](.github/workflows/README.md)  
 For setup instructions, see [.github/workflows/SETUP.md](.github/workflows/SETUP.md)
@@ -236,22 +287,21 @@ For setup instructions, see [.github/workflows/SETUP.md](.github/workflows/SETUP
 
 ### Adding More Songs
 
-1. Add your MP3 files to the project directory
-2. Update the `Dockerfile` to copy the new files
-3. Update `index.html` to add new playlist items
-4. Rebuild the Docker image
+1. Add your MP3 files to `app/media/`
+2. Update `app/index.html` to add new playlist items
+3. Rebuild the Docker image and push — the pipeline handles the rest
 
 ### Changing Port
 
 Edit `docker-compose.yml` or use a different port in the `docker run` command:
 
-```powershell
+```bash
 docker run -d -p 3000:80 --name music-dashboard music-dashboard
 ```
 
 ### Nginx Configuration
 
-Modify `nginx.conf` to customize:
+Modify `app/nginx.conf` to customize:
 - Caching policies
 - Security headers
 - MIME types
@@ -260,18 +310,23 @@ Modify `nginx.conf` to customize:
 ## Troubleshooting
 
 ### Container won't start
-```powershell
+```bash
 # Check logs
 docker logs music-dashboard
 
 # Check if port 8080 is already in use
-netstat -ano | findstr :8080
+lsof -i :8080
 ```
 
 ### Media files not loading
-- Ensure files are in the project directory
+- Ensure files are in `app/media/`
 - Check Dockerfile COPY commands
-- Verify nginx.conf MIME types
+- Verify `app/nginx.conf` MIME types
+
+### ArgoCD not syncing
+- Confirm Git changes were pushed
+- ArgoCD polls every ~3 minutes; or trigger a manual sync from the UI
+- Check ArgoCD app status: `kubectl get applications -n argocd`
 
 ## License
 
